@@ -1,0 +1,102 @@
+services:
+  # DEV
+  access-system-api:
+    container_name: access-system-api
+    profiles:
+      - dev
+    build:
+      context: ./
+      dockerfile: ./docker/Dockerfile
+    env_file:
+      - .env
+    networks:
+      - default-network
+    ports:
+      - "8081:8081"
+    depends_on:
+      access-system-postgres:
+        condition: service_healthy
+
+  access-system-postgres:
+    image: pgvector/pgvector:0.8.0-pg17-trixie
+    env_file:
+      - .env
+    container_name: ${POSTGRES_HOST}
+    profiles:
+      - dev
+    networks:
+      - default-network
+    ports:
+      - "5432:${POSTGRES_PORT}"
+    volumes:
+      - ./docker/db/scripts/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER}" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  access-system-pgadmin:
+    image: dpage/pgadmin4
+    env_file:
+      - .env
+    container_name: access-system-pgadmin
+    profiles:
+      - dev
+    networks:
+      - default-network
+    ports:
+      - "8091:80"
+    volumes:
+      - pgadmindata:/var/lib/pgadmin
+    depends_on:
+      - access-system-postgres
+
+  # TEST
+  access-system-api-test:
+    container_name: access-system-api-test
+    profiles:
+      - test
+    build:
+      context: ./
+      dockerfile: ./docker/test.Dockerfile
+    env_file:
+      - .env
+    networks:
+      - test-network
+    depends_on:
+      access-system-postgres-test:
+        condition: service_healthy
+
+  access-system-postgres-test:
+    image: pgvector/pgvector:0.8.0-pg17-trixie
+    env_file:
+      - .env
+    container_name: ${POSTGRES_TEST_HOST}
+    profiles:
+      - test
+    networks:
+      - test-network
+    ports:
+      - "5433:${POSTGRES_TEST_PORT}"
+    volumes:
+      - ./docker/db/scripts/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_TEST_USER}" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    environment:
+      - POSTGRES_USER=${POSTGRES_TEST_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_TEST_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_TEST_DB}
+
+networks:
+  default-network:
+    driver: bridge
+  test-network:
+    driver: bridge
+volumes:
+  pgdata:
+  pgadmindata:
